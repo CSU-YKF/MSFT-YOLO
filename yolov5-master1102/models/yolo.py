@@ -23,6 +23,7 @@ if platform.system() != 'Windows':
     ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 from models.common import *
+from models.MobileViTmodels import *
 from models.experimental import *
 from utils.autoanchor import check_anchor_order
 from utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
@@ -342,7 +343,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
 
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP,
-                 CoordAtt,CrossConv,C3,CTR3,C3TR,C3SPP, C3Ghost,RepVGGBlock]:
+                 CoordAtt,CrossConv,C3,CTR3,C3TR,C3SPP, C3Ghost,RepVGGBlock, MV2Block,MobileViTAttention]:
             c1, c2 = ch[f], args[0]
             if c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
