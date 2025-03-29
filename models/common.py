@@ -118,8 +118,8 @@ class BiFPN(nn.Module):
         p4_up = self.trans4_up(p4_in + F.interpolate(p5_up, size=p4_in.shape[2:], mode='nearest'))
 
         # Bottom-up path with weighted fusion
-        p5_td = w[1, 0] * p5_in + w[1, 1] * p5_up + w[1, 2] * F.interpolate(p4_up, size=p5_in.shape[2:], mode='bilinear')
-        p6_td = w[0, 0] * p6_in + w[0, 1] * p6_up + w[0, 2] * F.interpolate(p5_td, size=p4_in.shape[2:], mode='bilinear')
+        p5_td = w[1, 0] * p5_in + w[1, 1] * p5_up + w[1, 2] * F.interpolate(p4_up, size=p5_in.shape[2:], mode='bilinear', align_corners=True)
+        p6_td = w[0, 0] * p6_in + w[0, 1] * p6_up + w[0, 2] * F.interpolate(p5_td, size=p6_in.shape[2:], mode='bilinear', align_corners=True)
 
         p4_out = p4_up
         p6_out = self.trans6_out(F.interpolate(p6_td, size=p4_out.shape[2:], mode='nearest'))

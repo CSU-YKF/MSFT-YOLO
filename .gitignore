@@ -256,3 +256,6 @@ datasets/
 checkpoints/
 
 runs/
+
+*.out
+nohup.out

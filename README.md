@@ -236,7 +236,7 @@ python train.py
    - 将收集的无缺陷样本加入数据集。
    - 使用第一阶段的权重继续训练：
      ```bash
-     python train.py --img 640 --batch 16 --epochs 10 --data data/NEU-DET.yaml --cfg models/yolomsft.yaml --weights runs/train/exp/weights/best.pt --hyp data/hyps/hyp.scratch.yaml --device 0
+     python train.py --img 640 --batch 2 --epochs 50 --data data/NEU-stage2.yaml --cfg models/yolomsft.yaml --weights checkpoints/yolomsft-stage1-best.pt --hyp data/hyps/hyp.scratch.yaml --device 0
      ```
 
 ## 验证与测试
