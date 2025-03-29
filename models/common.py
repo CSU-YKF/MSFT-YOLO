@@ -94,12 +94,12 @@ class BiFPN(nn.Module):
         self.conv_p5 = nn.Conv2d(in_channels_list[1], out_channels, 1)
         self.conv_p6 = nn.Conv2d(in_channels_list[2], out_channels, 1)
 
-        self.conv6_up = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
-        self.conv5_up = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
-        self.conv4_up = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
-        self.conv6_td = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
-        self.conv5_td = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
-        self.conv4_out = nn.Conv2d(out_channels, out_channels, 3, 1, 1)
+        self.sppf6 = SPPF(out_channels, out_channels)
+        self.trans5_up = TRANS(out_channels)
+        self.trans4_up = TRANS(out_channels)
+
+        self.trans5_out = TRANS(out_channels)
+        self.trans6_out = TRANS(out_channels)
         self.weights = nn.Parameter(torch.ones(6, 3))  # Learnable weights for fusion
 
     def forward(self, inputs):
@@ -112,18 +112,18 @@ class BiFPN(nn.Module):
         w = F.relu(self.weights)  # Ensure weights are non-negative
         w = w / (w.sum(1, keepdim=True) + 1e-6)  # Normalize
 
-        # Top-down path
-        p6_td = self.conv6_td(p6_in)
-        p5_td = self.conv5_up(p5_in + F.interpolate(p6_td, size=p5_in.shape[2:], mode='nearest'))
-        p4_td = self.conv4_up(p4_in + F.interpolate(p5_td, size=p4_in.shape[2:], mode='nearest'))
+        # TransUp path
+        p6_up = self.sppf6(p6_in)
+        p5_up = self.trans5_up(p5_in + F.interpolate(p6_up, size=p5_in.shape[2:], mode='nearest'))
+        p4_up = self.trans4_up(p4_in + F.interpolate(p5_up, size=p4_in.shape[2:], mode='nearest'))
 
         # Bottom-up path with weighted fusion
-        p4_out = self.conv4_out(w[0, 0] * p4_in + w[0, 1] * p4_td + w[0, 2] * F.interpolate(p5_td, size=p4_in.shape[2:], mode='nearest'))
-        p5_out = self.conv5_td(w[1, 0] * p5_in + w[1, 1] * p5_td + w[1, 2] * F.interpolate(p6_td, size=p5_in.shape[2:], mode='nearest'))
-        p6_out = self.conv6_up(w[2, 0] * p6_in + w[2, 1] * p6_td)
+        p5_td = w[1, 0] * p5_in + w[1, 1] * p5_up + w[1, 2] * F.interpolate(p4_up, size=p5_in.shape[2:], mode='bilinear')
+        p6_td = w[0, 0] * p6_in + w[0, 1] * p6_up + w[0, 2] * F.interpolate(p5_td, size=p4_in.shape[2:], mode='bilinear')
 
-        p6_out = F.interpolate(p6_out, size=p4_out.shape[2:], mode='nearest')
-        p5_out = F.interpolate(p5_out, size=p4_out.shape[2:], mode='nearest')
+        p4_out = p4_up
+        p6_out = self.trans6_out(F.interpolate(p6_td, size=p4_out.shape[2:], mode='nearest'))
+        p5_out = self.trans5_out(F.interpolate(p5_td, size=p4_out.shape[2:], mode='nearest'))
         return torch.cat([p4_out, p5_out, p6_out], dim=1)  # Concatenate outputs
 
 
