@@ -188,17 +188,25 @@ elif m is BiFPN:
 ### 超参数设置
 在 `data/hyps/hyp.scratch.yaml` 中更新超参数（参考论文建议）：
 ```yaml
-lr0: 0.02           # 初始学习率
-lrf: 0.1            # 学习率衰减因子
-momentum: 0.937     # SGD 动量
+lr0: 0.02            # 初始学习率
+lrf: 0.1             # 学习率衰减因子
+momentum: 0.937      # SGD 动量
 weight_decay: 0.0005 # 权重衰减
-warmup_epochs: 3.0  # 预热周期
+warmup_epochs: 3.0   # 预热周期
 ```
 
 ### 模型训练
 运行以下命令开始训练：
 ```bash
-python train.py --img 640 --batch 16 --epochs 10 --data data/NEU-DET.yaml --cfg models/yolomsft.yaml --weights '' --hyp data/hyps/hyp.scratch.yaml --device 0
+python train.py 
+    --img 640 
+    --batch 16 
+    --epochs 10 
+    --data data/NEU-DET.yaml 
+    --cfg models/yolomsft.yaml
+    --weights '' 
+    --hyp data/hyps/hyp.scratch.yaml 
+    --device 0
 ```
 - `--img 640`：输入图像尺寸 640x640。
 - `--batch 16`：批次大小（根据显存调整）。
