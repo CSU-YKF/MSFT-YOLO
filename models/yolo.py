@@ -52,6 +52,7 @@ class Detect(nn.Module):
 
     def forward(self, x):
         z = []  # inference output
+        x = x if isinstance(x, list) else list(x)  # expand
         for i in range(self.nl):
             x[i] = self.m[i](x[i])  # conv
             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
@@ -252,6 +253,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
+    nl = len(anchors) if isinstance(anchors, list) else 1  # number of detection layers
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
@@ -275,14 +277,41 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 n = 1
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
+            c2 = ch[f]
         elif m is Concat:
             c2 = sum([ch[x] for x in f])
         elif m is BiFPN:
-            c2 = ch[f[0]] + ch[f[1]]  # BiFPN
+            # Assuming BiFPN args in yaml are: [[in_ch_list], out_ch]
+            # We need c1 (input channels) to be the list derived from f
+            c1 = [ch[x] for x in f]
+            c2 = args[1]
+            args = [c1, c2]
+            # c2 = ch[f[0]] + ch[f[1]]  # BiFPN
         elif m is Detect:
-            args.append([ch[x] for x in f])
-            if isinstance(args[1], int):  # number of anchors
-                args[1] = [list(range(args[1] * 2))] * len(f)
+            # args = [nc, anchors] initially
+            input_channels_for_detect = []
+            if isinstance(f, int) and f == -1:
+                # Input is from the single previous layer (e.g., BiFPN)
+                # BiFPN output channel count is stored in ch[-1]
+                prev_layer_output_channels = ch[-1]
+                # Assume previous layer outputs nl tensors, each with this channel count
+                input_channels_for_detect = [prev_layer_output_channels] * nl
+            elif isinstance(f, list): # Standard case: Input from multiple specific layers like [17, 20, 23]
+                 input_channels_for_detect = [ch[x] for x in f]
+            else:
+                 # Handle error or other cases if necessary
+                 raise ValueError(f"Unsupported 'from' field type {type(f)} for Detect layer {i}")
+
+            args.append(input_channels_for_detect) # args becomes [nc, anchors, [ch1, ch2, ch3]]
+            c2 = 0 # Detect layer doesn't have a single output channel dimension
+
+            # Remove the potentially problematic check based on args[1] type, as args[1] is the anchors list
+            # if isinstance(args[1], int):
+            #     args[1] = [list(range(args[1] * 2))] * len(f) # This logic seems flawed
+
+            # args.append([ch[x] for x in f])
+            # if isinstance(args[1], int):  # number of anchors
+            #     args[1] = [list(range(args[1] * 2))] * len(f)
         elif m is Contract:
             c2 = ch[f] * args[0] ** 2
         elif m is Expand:

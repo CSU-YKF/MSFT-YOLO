@@ -56,29 +56,37 @@ class DWConv(Conv):
 
 
 class TRANS(nn.Module):
-    def __init__(self, in_channels, num_heads=8, d_model=1024, d_n=33, dropout=0.1):
+    def __init__(self, in_channels, out_channels=None, num_heads=4, d_model=256, dropout=0.1):
         super(TRANS, self).__init__()
         self.d_model = d_model
-        self.proj = nn.Conv2d(in_channels, d_model, 1)  # Project to d_model
-        self.attn = nn.MultiheadAttention(d_model, num_heads, dropout=dropout)
+        out_channels = in_channels if out_channels is None else out_channels
+        self.proj = Conv(in_channels, d_model, 1)  # Project to d_model
+        self.attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=num_heads, dropout=dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_model * 4),
+            nn.Linear(d_model, 4 * d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(d_model * 4, d_model)
+            nn.Linear(4 * d_model, d_model)
         )
         self.norm2 = nn.LayerNorm(d_model)
-        self.proj_back = nn.Conv2d(d_model, in_channels, 1)  # Project back
+        self.proj_back = Conv(d_model, out_channels, 1)  # Project back
 
     def forward(self, x):
         b, c, h, w = x.shape
         x = self.proj(x)  # [B, d_model, H, W]
         x = x.flatten(2).permute(2, 0, 1)  # [H*W, B, d_model]
-        attn_output, _ = self.attn(x, x, x)  # Self-attention
-        x = self.norm1(x + attn_output)
-        ffn_output = self.ffn(x)  # Feed-forward
-        x = self.norm2(x + ffn_output)
+
+        # Pre-LN Attention
+        x_norm1 = self.norm1(x)
+        attn_output, _ = self.attn(x_norm1, x_norm1, x_norm1)  # Self-attention
+        x = x + attn_output
+
+        # Pre-LN FFN
+        x_norm2 = self.norm2(x)
+        ffn_output = self.ffn(x_norm2)  # Feed-forward
+        x = x + ffn_output
+
         x = x.permute(1, 2, 0).view(b, self.d_model, h, w)  # [B, d_model, H, W]
         x = self.proj_back(x)  # [B, C, H, W]
 
@@ -90,17 +98,20 @@ class BiFPN(nn.Module):
         super(BiFPN, self).__init__()
         self.out_channels = out_channels
 
-        self.conv_p4 = nn.Conv2d(in_channels_list[0], out_channels, 1)
-        self.conv_p5 = nn.Conv2d(in_channels_list[1], out_channels, 1)
-        self.conv_p6 = nn.Conv2d(in_channels_list[2], out_channels, 1)
+        self.conv_p4 = Conv(in_channels_list[0], out_channels, 1)
+        self.conv_p5 = Conv(in_channels_list[1], out_channels, 1)
+        self.conv_p6 = Conv(in_channels_list[2], out_channels, 1)
 
         self.sppf6 = SPPF(out_channels, out_channels)
         self.trans5_up = TRANS(out_channels)
         self.trans4_up = TRANS(out_channels)
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
+        self.down_conv5 = Conv(out_channels, out_channels, 3, 2)
+        self.down_conv6 = Conv(out_channels, out_channels, 3, 2)
         self.trans5_out = TRANS(out_channels)
         self.trans6_out = TRANS(out_channels)
-        self.weights = nn.Parameter(torch.ones(6, 3))  # Learnable weights for fusion
+        self.weights = nn.Parameter(torch.ones(2, 3))  # Learnable weights for fusion
 
     def forward(self, inputs):
         p4_in, p5_in, p6_in = inputs  # From backbone
@@ -114,17 +125,16 @@ class BiFPN(nn.Module):
 
         # TransUp path
         p6_up = self.sppf6(p6_in)
-        p5_up = self.trans5_up(p5_in + F.interpolate(p6_up, size=p5_in.shape[2:], mode='nearest'))
-        p4_up = self.trans4_up(p4_in + F.interpolate(p5_up, size=p4_in.shape[2:], mode='nearest'))
+        p5_up = self.trans5_up(p5_in) + self.upsample(p6_up)
+        p4_up = self.trans4_up(p4_in) + self.upsample(p5_up)
 
         # Bottom-up path with weighted fusion
-        p5_td = w[1, 0] * p5_in + w[1, 1] * p5_up + w[1, 2] * F.interpolate(p4_up, size=p5_in.shape[2:], mode='bilinear', align_corners=True)
-        p6_td = w[0, 0] * p6_in + w[0, 1] * p6_up + w[0, 2] * F.interpolate(p5_td, size=p6_in.shape[2:], mode='bilinear', align_corners=True)
+        p5_td = w[1, 0] * p5_in + w[1, 1] * p5_up + w[1, 2] * self.down_conv5(p4_up)
+        p6_td = w[0, 0] * p6_in + w[0, 1] * p6_up + w[0, 2] * self.down_conv6(p5_td)
 
-        p4_out = p4_up
-        p6_out = self.trans6_out(F.interpolate(p6_td, size=p4_out.shape[2:], mode='nearest'))
-        p5_out = self.trans5_out(F.interpolate(p5_td, size=p4_out.shape[2:], mode='nearest'))
-        return torch.cat([p4_out, p5_out, p6_out], dim=1)  # Concatenate outputs
+        p6_out = self.trans6_out(p6_td)
+        p5_out = self.trans5_out(p5_td)
+        return p4_up, p5_out, p6_out  # [B, 256, H4, W4], [B, 256, H5, W5], [B, 256, H6, W6]
 
 
 class TransformerLayer(nn.Module):

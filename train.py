@@ -433,12 +433,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default="C:\\yolov5\\yolov5-6.0\\wight\\yolov5l.pt", help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='C:\\yolov5\\yolov5-6.0\\models\\yolov5l.yaml', help='model.yaml path')
-    parser.add_argument('--data', type=str, default="C:\\yolov5\\yolov5-6.0\\data\\dateset.yaml", help='dataset.yaml path')
+    parser.add_argument('--weights', type=str, default="checkpoints/yolov5l.pt", help='initial weights path')
+    parser.add_argument('--cfg', type=str, default='./models/yolomsft.yaml', help='model.yaml path')
+    parser.add_argument('--data', type=str, default="./data/NEU-DET.yaml", help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=2)
-    parser.add_argument('--batch-size', type=int, default=2, help='total batch size for all GPUs')
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--batch-size', type=int, default=6, help='total batch size for all GPUs')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
